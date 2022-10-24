@@ -52,9 +52,6 @@ func processPkg(pkg *packages.Package) {
 
 	for i, synFile := range pkg.Syntax {
 		pkg.Syntax[i] = astutil.Apply(synFile, processDeclNode, nil).(*ast.File)
-		// for _, dec := range synFile.Decls {
-		// ast.Inspect(dec, processDeclNode)
-		// }
 	}
 
 	// f, err := os.Create("main_gen.go")
@@ -80,12 +77,14 @@ func processDeclNode(c *astutil.Cursor) bool {
 		return true
 	}
 
+	// Only operate on func called 'test'
 	if funcDecl.Name.Name != "test" {
 		return false
 	}
 
 	for _, stmt := range funcDecl.Body.List {
 
+		// Find functions calls in the style of 'cogo.ABC123()'
 		exprStmt, ok := stmt.(*ast.ExprStmt)
 		if !ok {
 			continue
@@ -107,6 +106,7 @@ func processDeclNode(c *astutil.Cursor) bool {
 		}
 		fmt.Printf("Found: %+v\n", pkgFuncCallExpr)
 
+		// Now that we found a call to cogo decide what to do
 		if pkgFuncCallExpr.Sel.Name == "Yield" {
 
 			exprStmt.X = &ast.CallExpr{
