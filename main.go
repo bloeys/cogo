@@ -24,32 +24,53 @@ func Wow() {
 	println("wow")
 }
 
-func test() {
+// func test() {
+
+// 	cogo.Begin()
+
+// 	println("hi")
+// 	println("this is from state_0")
+// 	cogo.Yield()
+// 	state = 1
+
+// 	if 1 > 2 {
+// 		println("gg")
+// 	}
+
+// 	println("Bye")
+// 	println("this is from state_1")
+// 	cogo.Yield()
+// 	state = 2
+
+// 	cogo.End()
+// }
+
+func test2() {
 
 	cogo.Begin()
 
-	println("hi")
-	println("this is from state_0")
+	println("Hey")
 	cogo.Yield()
-	state = 1
 
-	if 1 > 2 {
-		println("gg")
-	}
+	println("How you?")
+	cogo.Yield()
 
 	println("Bye")
-	println("this is from state_1")
 	cogo.Yield()
-	state = 2
 
 	cogo.End()
 }
 
 func main() {
 
-	test()
-	test()
-	test()
+	// test()
+	// test()
+	// test()
+
+	test2()
+	test2()
+	test2()
+	test2()
 
 	println("Final state:", state)
 }

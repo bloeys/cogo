@@ -77,12 +77,11 @@ func processDeclNode(c *astutil.Cursor) bool {
 		return true
 	}
 
-	// Only operate on func called 'test'
-	if funcDecl.Name.Name != "test" {
+	if !funcDeclCallsCogo(funcDecl) {
 		return false
 	}
 
-	for _, stmt := range funcDecl.Body.List {
+	for i, stmt := range funcDecl.Body.List {
 
 		// Find functions calls in the style of 'cogo.ABC123()'
 		exprStmt, ok := stmt.(*ast.ExprStmt)
@@ -107,7 +106,32 @@ func processDeclNode(c *astutil.Cursor) bool {
 		fmt.Printf("Found: %+v\n", pkgFuncCallExpr)
 
 		// Now that we found a call to cogo decide what to do
-		if pkgFuncCallExpr.Sel.Name == "Yield" {
+		if pkgFuncCallExpr.Sel.Name == "Begin" {
+
+			beginStmt := &ast.SwitchStmt{
+				Tag: ast.NewIdent("state"),
+				Body: &ast.BlockStmt{
+					List: []ast.Stmt{
+						&ast.CaseClause{
+							List: nil,
+							Body: []ast.Stmt{
+								&ast.ExprStmt{
+									X: &ast.CallExpr{
+										Fun: &ast.Ident{
+											Name: "Wow",
+										},
+										Args: nil,
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+
+			funcDecl.Body.List[i] = beginStmt
+
+		} else if pkgFuncCallExpr.Sel.Name == "Yield" {
 
 			exprStmt.X = &ast.CallExpr{
 				Fun: &ast.Ident{
@@ -119,4 +143,50 @@ func processDeclNode(c *astutil.Cursor) bool {
 	}
 
 	return true
+}
+
+func funcDeclCallsCogo(fd *ast.FuncDecl) bool {
+
+	if fd.Body == nil || len(fd.Body.List) == 0 {
+		return false
+	}
+
+	for _, stmt := range fd.Body.List {
+
+		// Find functions calls in the style of 'cogo.ABC123()'
+		exprStmt, ok := stmt.(*ast.ExprStmt)
+		if !ok {
+			continue
+		}
+
+		callExpr, ok := exprStmt.X.(*ast.CallExpr)
+		if !ok {
+			continue
+		}
+
+		pkgFuncCallExpr, ok := callExpr.Fun.(*ast.SelectorExpr)
+		if !ok {
+			continue
+		}
+
+		pkgIdent, ok := pkgFuncCallExpr.X.(*ast.Ident)
+		return ok && pkgIdent.Name == "cogo"
+	}
+
+	return false
+}
+
+func filter[T any](arr []T, where func(x T) bool) []T {
+
+	out := []T{}
+	for i := 0; i < len(arr); i++ {
+
+		if !where(arr[i]) {
+			continue
+		}
+
+		out = append(out, arr[i])
+	}
+
+	return out
 }
