@@ -30,28 +30,6 @@ func test(c *cogo.Coroutine[int, int]) (out int) {
 	c.Yield(4)
 
 	println("Tick before end")
-	c.End()
-
-	// switch c.State {
-	// case 0:
-	// 	println("Tick 0")
-	// 	c.State++
-	// 	return 1, false
-	// case 1:
-	// 	println("Tick 1")
-	// 	c.State++
-	// 	return 2, false
-	// case 2:
-	// 	println("Tick 2")
-	// 	c.State++
-	// 	return 3, false
-	// case 3:
-	// 	println("Tick 3")
-	// 	c.State++
-	// 	return 4, false
-	// default:
-	// 	return out, true
-	// }
 
 	return out
 }

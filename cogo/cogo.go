@@ -23,6 +23,3 @@ func (c *Coroutine[InT, OutT]) Tick() (out OutT, done bool) {
 
 func (c *Coroutine[InT, OutT]) Yield(out OutT) {
 }
-
-func (c *Coroutine[InT, OutT]) End() {
-}

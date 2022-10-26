@@ -165,40 +165,32 @@ func (p *processor) processDeclNode(c *astutil.Cursor) bool {
 
 			lastCaseEndBodyListIndex = i
 
-		} else if cogoFuncSelExpr.Sel.Name == "End" {
-
-			// Add everything from the last begin/yield until this yield into a case
-			stmtsSinceLastCogo := funcDecl.Body.List[lastCaseEndBodyListIndex+1 : i]
-			stmtsAfterEnd := funcDecl.Body.List[i+1:]
-
-			caseStmts := make([]ast.Stmt, 0, len(stmtsSinceLastCogo)+len(stmtsAfterEnd)+1)
-			caseStmts = append(caseStmts, stmtsSinceLastCogo...)
-			caseStmts = append(caseStmts,
-				&ast.AssignStmt{
-					Lhs: []ast.Expr{ast.NewIdent(coroutineParamName + ".State")},
-					Tok: token.ASSIGN,
-					Rhs: []ast.Expr{ast.NewIdent("-1")},
-				},
-			)
-			caseStmts = append(caseStmts, stmtsAfterEnd...)
-
-			switchStmt.Body.List = append(switchStmt.Body.List,
-				getCaseWithStmts(
-					[]ast.Expr{ast.NewIdent(fmt.Sprint(len(switchStmt.Body.List)))},
-					caseStmts,
-				),
-			)
-
-			lastCaseEndBodyListIndex = i
 		}
 	}
 
+	// Add everything after the last yield in a separate case
+	stmtsToEndOfFunc := funcDecl.Body.List[lastCaseEndBodyListIndex+1:]
+
+	caseStmts := make([]ast.Stmt, 0, len(stmtsToEndOfFunc)+1)
+	caseStmts = append(caseStmts,
+		&ast.AssignStmt{
+			Lhs: []ast.Expr{ast.NewIdent(coroutineParamName + ".State")},
+			Tok: token.ASSIGN,
+			Rhs: []ast.Expr{ast.NewIdent("-1")},
+		},
+	)
+	caseStmts = append(caseStmts, stmtsToEndOfFunc...)
+
+	switchStmt.Body.List = append(switchStmt.Body.List,
+		getCaseWithStmts(
+			[]ast.Expr{ast.NewIdent(fmt.Sprint(len(switchStmt.Body.List)))},
+			caseStmts,
+		),
+	)
+
+	// Apply changes
 	funcDecl.Body.List = funcDecl.Body.List[:beginBodyListIndex]
 	funcDecl.Body.List = append(funcDecl.Body.List,
-		// &ast.LabeledStmt{
-		// 	Label: ast.NewIdent(cogoSwitchLbl),
-		// 	Stmt:  switchStmt,
-		// },
 		switchStmt,
 	)
 	return true
