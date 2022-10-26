@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"go/ast"
 	"go/format"
+	"go/token"
 	"os"
 
 	"golang.org/x/tools/go/ast/astutil"
@@ -50,8 +51,11 @@ func main() {
 
 func processPkg(pkg *packages.Package) {
 
+	p := processor{
+		fset: pkg.Fset,
+	}
 	for i, synFile := range pkg.Syntax {
-		pkg.Syntax[i] = astutil.Apply(synFile, processDeclNode, nil).(*ast.File)
+		pkg.Syntax[i] = astutil.Apply(synFile, p.processDeclNode, nil).(*ast.File)
 	}
 
 	// f, err := os.Create("main_gen.go")
@@ -65,7 +69,11 @@ func processPkg(pkg *packages.Package) {
 	}
 }
 
-func processDeclNode(c *astutil.Cursor) bool {
+type processor struct {
+	fset *token.FileSet
+}
+
+func (p *processor) processDeclNode(c *astutil.Cursor) bool {
 
 	n := c.Node()
 	if n == nil {
@@ -81,67 +89,70 @@ func processDeclNode(c *astutil.Cursor) bool {
 		return false
 	}
 
+	beginBodyListIndex := -1
+	lastCaseEndBodyListIndex := -1
+	switchStmt := &ast.SwitchStmt{
+		Tag: ast.NewIdent("c.state"),
+		Body: &ast.BlockStmt{
+			List: []ast.Stmt{},
+		},
+	}
+
 	for i, stmt := range funcDecl.Body.List {
 
+		var cogoFuncCallExpr *ast.SelectorExpr
+
+		// ifStmt, ifStmtOk := stmt.(*ast.IfStmt)
+		// if ifStmtOk {
+		// 	handleNestedCogo(ifStmt.Body)
+		// 	continue
+		// }
+
 		// Find functions calls in the style of 'cogo.ABC123()'
-		exprStmt, ok := stmt.(*ast.ExprStmt)
-		if !ok {
+		exprStmt, exprStmtOk := stmt.(*ast.ExprStmt)
+		if !exprStmtOk {
 			continue
 		}
 
-		callExpr, ok := exprStmt.X.(*ast.CallExpr)
-		if !ok {
+		callExpr, exprStmtOk := exprStmt.X.(*ast.CallExpr)
+		if !exprStmtOk {
 			continue
 		}
 
-		pkgFuncCallExpr, ok := callExpr.Fun.(*ast.SelectorExpr)
-		if !ok {
+		cogoFuncCallExpr, exprStmtOk = callExpr.Fun.(*ast.SelectorExpr)
+		if !exprStmtOk {
 			continue
 		}
 
-		pkgIdent, ok := pkgFuncCallExpr.X.(*ast.Ident)
-		if !ok || pkgIdent.Name != "cogo" {
+		if !funcCallHasPkgName(cogoFuncCallExpr, "cogo") {
 			continue
 		}
-		fmt.Printf("Found: %+v\n", pkgFuncCallExpr)
+
+		cogoFuncCallLineNum := p.fset.File(cogoFuncCallExpr.Pos()).Line(cogoFuncCallExpr.Pos())
+		fmt.Printf("Found: '%+v' at line %d\n", cogoFuncCallExpr, cogoFuncCallLineNum)
 
 		// Now that we found a call to cogo decide what to do
-		if pkgFuncCallExpr.Sel.Name == "Begin" {
+		if cogoFuncCallExpr.Sel.Name == "Begin" {
 
-			beginStmt := &ast.SwitchStmt{
-				Tag: ast.NewIdent("state"),
-				Body: &ast.BlockStmt{
-					List: []ast.Stmt{
-						&ast.CaseClause{
-							List: nil,
-							Body: []ast.Stmt{
-								&ast.ExprStmt{
-									X: &ast.CallExpr{
-										Fun: &ast.Ident{
-											Name: "Wow",
-										},
-										Args: nil,
-									},
-								},
-							},
-						},
-					},
-				},
-			}
+			beginBodyListIndex = i
+			lastCaseEndBodyListIndex = i
+			continue
+		} else if cogoFuncCallExpr.Sel.Name == "Yield" || cogoFuncCallExpr.Sel.Name == "End" {
 
-			funcDecl.Body.List[i] = beginStmt
+			// Add everything from the last begin/yield until this yield into a case
 
-		} else if pkgFuncCallExpr.Sel.Name == "Yield" {
+			stmtsSinceLastCogo := funcDecl.Body.List[lastCaseEndBodyListIndex+1 : i]
+			switchStmt.Body.List = append(switchStmt.Body.List, getCaseWithStmts(
+				stmtsSinceLastCogo,
+				[]ast.Expr{ast.NewIdent(fmt.Sprint(cogoFuncCallLineNum))},
+			))
 
-			exprStmt.X = &ast.CallExpr{
-				Fun: &ast.Ident{
-					Name: "Wow",
-				},
-				Args: nil,
-			}
+			lastCaseEndBodyListIndex = i
 		}
 	}
 
+	funcDecl.Body.List = funcDecl.Body.List[:beginBodyListIndex]
+	funcDecl.Body.List = append(funcDecl.Body.List, switchStmt)
 	return true
 }
 
@@ -169,11 +180,15 @@ func funcDeclCallsCogo(fd *ast.FuncDecl) bool {
 			continue
 		}
 
-		pkgIdent, ok := pkgFuncCallExpr.X.(*ast.Ident)
-		return ok && pkgIdent.Name == "cogo"
+		return funcCallHasPkgName(pkgFuncCallExpr, "cogo")
 	}
 
 	return false
+}
+
+func funcCallHasPkgName(selExpr *ast.SelectorExpr, pkgName string) bool {
+	pkgIdent, ok := selExpr.X.(*ast.Ident)
+	return ok && pkgIdent.Name == pkgName
 }
 
 func filter[T any](arr []T, where func(x T) bool) []T {
@@ -189,4 +204,11 @@ func filter[T any](arr []T, where func(x T) bool) []T {
 	}
 
 	return out
+}
+
+func getCaseWithStmts(stmts []ast.Stmt, conditions []ast.Expr) *ast.CaseClause {
+	return &ast.CaseClause{
+		List: conditions,
+		Body: stmts,
+	}
 }

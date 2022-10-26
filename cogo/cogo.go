@@ -1,10 +1,12 @@
 package cogo
 
-func Begin() {
+// func Tick(c any) {
+// }
 
+func Begin() {
 }
 
-func Yield() {
+func Yield[T any](out T) {
 
 }
 

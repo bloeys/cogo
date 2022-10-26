@@ -9,70 +9,120 @@ import (
 	"github.com/bloeys/cogo/cogo"
 )
 
-type Coroutine[T any] struct {
+type CoroutineFunc[InT, OutT any] func(c *Coroutine[InT, OutT]) (out OutT)
+
+type Coroutine[InT, OutT any] struct {
 	State int32
-	In    *T
+	In    InT
+	Func  CoroutineFunc[InT, OutT]
 }
 
-func (c *Coroutine[T]) Run(f func(in *T)) {
-	f(c.In)
+func (c *Coroutine[InT, OutT]) Tick() (out OutT, done bool) {
+
+	if c.State == -1 {
+		return out, true
+	}
+
+	out = c.Func(c)
+	return out, c.State == -1
 }
 
-var state = 0
+// func (c *Coroutine[InT, OutT]) Yield(out OutT) {
+// }
+
+func (c *Coroutine[InT, OutT]) Break() {
+}
 
 func Wow() {
 	println("wow")
 }
 
-// func test() {
+func test(c *Coroutine[int, int]) (out int) {
 
-// 	cogo.Begin()
+	cogo.Begin()
 
-// 	println("hi")
-// 	println("this is from state_0")
+	println("Tick 1")
+	cogo.Yield(1)
+
+	println("Tick 2")
+	cogo.Yield(2)
+
+	println("Tick 3")
+	cogo.Yield(3)
+
+	println("Tick 4")
+	cogo.Yield(4)
+
+	cogo.End()
+
+	// switch c.State {
+	// case 0:
+	// 	println("Tick 0")
+	// 	c.State++
+	// 	return 1, false
+	// case 1:
+	// 	println("Tick 1")
+	// 	c.State++
+	// 	return 2, false
+	// case 2:
+	// 	println("Tick 2")
+	// 	c.State++
+	// 	return 3, false
+	// case 3:
+	// 	println("Tick 3")
+	// 	c.State++
+	// 	return 4, false
+	// default:
+	// 	return out, true
+	// }
+
+	return out
+}
+
+// func test2() {
+
+// 	// cogo.Begin()
+
+// 	println("Hey")
 // 	cogo.Yield()
-// 	state = 1
 
-// 	if 1 > 2 {
-// 		println("gg")
-// 	}
+// 	println("How you?")
+// 	cogo.Yield()
 
 // 	println("Bye")
-// 	println("this is from state_1")
 // 	cogo.Yield()
-// 	state = 2
 
 // 	cogo.End()
 // }
 
-func test2() {
-
-	cogo.Begin()
-
-	println("Hey")
-	cogo.Yield()
-
-	println("How you?")
-	cogo.Yield()
-
-	println("Bye")
-	cogo.Yield()
-
-	cogo.End()
-}
-
 func main() {
 
-	// test()
-	// test()
-	// test()
+	x := 1
+switch_start:
+	switch x {
+	case 1:
+		println(1)
+		x = 3
+		goto switch_start
+	case 2:
+		println(2)
+	case 3:
+		println(3)
+	}
+	return
+	c := &Coroutine[int, int]{
+		Func: test,
+		In:   0,
+	}
 
-	test2()
-	test2()
-	test2()
-	test2()
+	for out, done := c.Tick(); !done; out, done = c.Tick() {
+		println(out)
+	}
 
-	println("Final state:", state)
+	// test2()
+	// test2()
+	// test2()
+	// test2()
 }
 
 func FileLine() int {
