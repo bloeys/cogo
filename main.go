@@ -9,51 +9,28 @@ import (
 	"github.com/bloeys/cogo/cogo"
 )
 
-type CoroutineFunc[InT, OutT any] func(c *Coroutine[InT, OutT]) (out OutT)
-
-type Coroutine[InT, OutT any] struct {
-	State int32
-	In    InT
-	Func  CoroutineFunc[InT, OutT]
-}
-
-func (c *Coroutine[InT, OutT]) Tick() (out OutT, done bool) {
-
-	if c.State == -1 {
-		return out, true
-	}
-
-	out = c.Func(c)
-	return out, c.State == -1
-}
-
-// func (c *Coroutine[InT, OutT]) Yield(out OutT) {
-// }
-
-func (c *Coroutine[InT, OutT]) Break() {
-}
-
 func Wow() {
 	println("wow")
 }
 
-func test(c *Coroutine[int, int]) (out int) {
+func test(c *cogo.Coroutine[int, int]) (out int) {
 
-	cogo.Begin()
+	c.Begin()
 
 	println("Tick 1")
-	cogo.Yield(1)
+	c.Yield(1)
 
 	println("Tick 2")
-	cogo.Yield(2)
+	c.Yield(2)
 
 	println("Tick 3")
-	cogo.Yield(3)
+	c.Yield(3)
 
 	println("Tick 4")
-	cogo.Yield(4)
+	c.Yield(4)
 
-	cogo.End()
+	println("Tick before end")
+	c.End()
 
 	// switch c.State {
 	// case 0:
@@ -97,20 +74,7 @@ func test(c *Coroutine[int, int]) (out int) {
 
 func main() {
 
-	x := 1
-switch_start:
-	switch x {
-	case 1:
-		println(1)
-		x = 3
-		goto switch_start
-	case 2:
-		println(2)
-	case 3:
-		println(3)
-	}
-	return
-	c := &Coroutine[int, int]{
+	c := &cogo.Coroutine[int, int]{
 		Func: test,
 		In:   0,
 	}
