@@ -118,9 +118,17 @@ func (p *processor) processDeclNode(c *astutil.Cursor) bool {
 		},
 	}
 
+	hasGenCheckExists := false
 	for i, stmt := range funcDecl.Body.List {
 
 		var cogoFuncSelExpr *ast.SelectorExpr
+
+		ifStmt, ok := stmt.(*ast.IfStmt)
+		if ok && ifStmtIsHasGen(ifStmt) {
+			funcDecl.Body.List[i] = createHasGenIfStmt(funcDecl, coroutineParamName)
+			hasGenCheckExists = true
+			continue
+		}
 
 		// Find functions calls in the style of 'xyz.ABC123()'
 		exprStmt, exprStmtOk := stmt.(*ast.ExprStmt)
@@ -207,25 +215,46 @@ func (p *processor) processDeclNode(c *astutil.Cursor) bool {
 
 	originalList := funcDecl.Body.List
 	funcDecl.Body.List = make([]ast.Stmt, 0, len(funcDecl.Body.List)+1)
-	funcDecl.Body.List = append(funcDecl.Body.List,
-		&ast.IfStmt{
-			Cond: createStmtFromSelFuncCall("cogo", "HasGen").(*ast.ExprStmt).X,
-			Body: &ast.BlockStmt{
-				List: []ast.Stmt{
-					&ast.ReturnStmt{
-						Results: []ast.Expr{&ast.CallExpr{
-							Fun: ast.NewIdent(funcDecl.Name.Name + "_cogo"),
-						}},
-					},
-				},
-			},
-		},
-	)
+
+	if !hasGenCheckExists {
+		funcDecl.Body.List = append(funcDecl.Body.List, createHasGenIfStmt(funcDecl, coroutineParamName))
+	}
 	funcDecl.Body.List = append(funcDecl.Body.List, originalList...)
 
 	p.funcDeclsToWrite = append(p.funcDeclsToWrite, funcDecl)
 
 	return true
+}
+
+func createHasGenIfStmt(funcDecl *ast.FuncDecl, coroutineParamName string) *ast.IfStmt {
+	return &ast.IfStmt{
+		Cond: createStmtFromSelFuncCall("cogo", "HasGen").(*ast.ExprStmt).X,
+		Body: &ast.BlockStmt{
+			List: []ast.Stmt{
+				&ast.ReturnStmt{
+					Results: []ast.Expr{&ast.CallExpr{
+						Fun:  ast.NewIdent(funcDecl.Name.Name + "_cogo"),
+						Args: []ast.Expr{ast.NewIdent(coroutineParamName)},
+					}},
+				},
+			},
+		},
+	}
+}
+
+func ifStmtIsHasGen(stmt *ast.IfStmt) bool {
+
+	callExpr, ok := stmt.Cond.(*ast.CallExpr)
+	if !ok {
+		return false
+	}
+
+	selExpr, ok := callExpr.Fun.(*ast.SelectorExpr)
+	if !ok {
+		return false
+	}
+
+	return selExprIs(selExpr, "cogo", "HasGen")
 }
 
 func createStmtFromFuncCall(funcName string) ast.Stmt {
