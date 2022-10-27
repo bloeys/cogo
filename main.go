@@ -10,22 +10,25 @@ import (
 )
 
 func test(c *cogo.Coroutine[int, int]) (out int) {
+	if cogo.HasGen() {
+		return test_cogo(c)
+	}
 
 	c.Begin()
 
 	println("Tick 1")
-	// c.Yield(1)
+	c.Yield(1)
 
-	// println("Tick 2")
-	// c.Yield(2)
+	println("Tick 2")
+	c.Yield(2)
 
-	// println("Tick 3")
-	// c.Yield(3)
+	println("Tick 3")
+	c.Yield(3)
 
-	// println("Tick 4")
-	// c.Yield(4)
+	println("Tick 4")
+	c.Yield(4)
 
-	// println("Tick before end")
+	println("Tick before end")
 
 	return out
 }
