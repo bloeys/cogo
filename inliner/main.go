@@ -179,6 +179,7 @@ func (p *processor) genCogoFuncsNodeProcessor(c *astutil.Cursor) bool {
 	for i, stmt := range funcDecl.Body.List {
 
 		var cogoFuncSelExpr *ast.SelectorExpr
+		var blockStmt *ast.BlockStmt
 
 		ifStmt, ifStmtOk := stmt.(*ast.IfStmt)
 		if ifStmtOk {
@@ -188,7 +189,15 @@ func (p *processor) genCogoFuncsNodeProcessor(c *astutil.Cursor) bool {
 				continue
 			}
 
-			subStateNums := p.genCogoIfStmt(ifStmt, coroutineParamName, len(switchStmt.Body.List))
+			blockStmt = ifStmt.Body
+
+		} else if bStmt, blockStmtOk := stmt.(*ast.BlockStmt); blockStmtOk {
+			blockStmt = bStmt
+		}
+
+		if blockStmt != nil {
+
+			subStateNums := p.genCogoBlockStmt(blockStmt, coroutineParamName, len(switchStmt.Body.List))
 			for _, subStateNum := range subStateNums {
 
 				subSwitchStmt.Body.List = append(subSwitchStmt.Body.List,
@@ -356,9 +365,9 @@ func (p *processor) genCogoFuncsNodeProcessor(c *astutil.Cursor) bool {
 	return true
 }
 
-func (p *processor) genCogoIfStmt(ifStmt *ast.IfStmt, coroutineParamName string, currCase int) (subStateNums []int32) {
+func (p *processor) genCogoBlockStmt(blockStmt *ast.BlockStmt, coroutineParamName string, currCase int) (subStateNums []int32) {
 
-	for i, stmt := range ifStmt.Body.List {
+	for i, stmt := range blockStmt.List {
 
 		selExpr, selExprArgs := tryGetSelExprFromStmt(stmt, coroutineParamName, "Yield")
 		if selExpr == nil {
@@ -369,7 +378,7 @@ func (p *processor) genCogoIfStmt(ifStmt *ast.IfStmt, coroutineParamName string,
 		// subStateNum >= 1000_000
 		newSubStateNum := rand.Int31() + 1000_000
 		subStateNums = append(subStateNums, newSubStateNum)
-		ifStmt.Body.List[i] = &ast.BlockStmt{
+		blockStmt.List[i] = &ast.BlockStmt{
 			List: []ast.Stmt{
 				&ast.AssignStmt{
 					Lhs: []ast.Expr{ast.NewIdent(coroutineParamName + ".State")},

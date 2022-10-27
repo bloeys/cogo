@@ -19,8 +19,13 @@ func test(c *cogo.Coroutine[int, int]) (out int) {
 	println("\nTick 1")
 	c.Yield(1)
 
+	{
+		println("\nInside block 1")
+		c.Yield(-20)
+	}
+
 	if c.In > 1 {
-		println("\nTick 1.5")
+		println("\nInside if 1")
 		c.Yield(c.In)
 	}
 

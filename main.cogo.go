@@ -19,17 +19,30 @@ func test_cogo(c *cogo.Coroutine[int, int]) (out int) {
 		default:
 		case 1299498081:
 			goto cogo_1299498081
+		case 2020727887:
+			goto cogo_2020727887
 		}
 
-		if c.In > 1 {
-			println("\nTick 1.5")
+		{
+			println("\nInside block 1")
 			{
 				c.State = 1
 				c.SubState = 1299498081
-				return c.In
+				return -20
 			}
 		}
 	cogo_1299498081:
+		;
+
+		if c.In > 1 {
+			println("\nInside if 1")
+			{
+				c.State = 1
+				c.SubState = 2020727887
+				return c.In
+			}
+		}
+	cogo_2020727887:
 		;
 
 		println("\nTick 2")
