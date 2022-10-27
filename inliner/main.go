@@ -11,8 +11,6 @@ import (
 	"golang.org/x/tools/go/packages"
 )
 
-const cogoSwitchLbl = "cogoSwitchLbl"
-
 func printDebugInfo() {
 
 	fmt.Printf("Running inliner on '%s'\n", os.Getenv("GOFILE"))
@@ -54,25 +52,44 @@ func main() {
 func processPkg(pkg *packages.Package) {
 
 	p := processor{
-		fset: pkg.Fset,
+		fset:             pkg.Fset,
+		funcDeclsToWrite: []*ast.FuncDecl{},
 	}
 	for i, synFile := range pkg.Syntax {
+
 		pkg.Syntax[i] = astutil.Apply(synFile, p.processDeclNode, nil).(*ast.File)
+
+		if len(p.funcDeclsToWrite) > 0 {
+
+			root := &ast.File{
+				Name:    synFile.Name,
+				Imports: synFile.Imports,
+				Decls:   []ast.Decl{},
+			}
+
+			for _, v := range p.funcDeclsToWrite {
+				root.Decls = append(root.Decls, &ast.FuncDecl{
+					Name: ast.NewIdent(v.Name.Name + "_cogo"),
+					Type: v.Type,
+					Body: v.Body,
+				})
+			}
+
+			// imports.Process()
+			err := format.Node(os.Stdout, pkg.Fset, root)
+			if err != nil {
+				panic(err.Error())
+			}
+
+			p.funcDeclsToWrite = p.funcDeclsToWrite[:0]
+		}
 	}
 
-	// f, err := os.Create("main_gen.go")
-	// if err != nil {
-	// 	panic(err.Error())
-	// }
-
-	err := format.Node(os.Stdout, pkg.Fset, pkg.Syntax[0])
-	if err != nil {
-		panic(err.Error())
-	}
 }
 
 type processor struct {
-	fset *token.FileSet
+	fset             *token.FileSet
+	funcDeclsToWrite []*ast.FuncDecl
 }
 
 func (p *processor) processDeclNode(c *astutil.Cursor) bool {
@@ -105,13 +122,7 @@ func (p *processor) processDeclNode(c *astutil.Cursor) bool {
 
 		var cogoFuncSelExpr *ast.SelectorExpr
 
-		// ifStmt, ifStmtOk := stmt.(*ast.IfStmt)
-		// if ifStmtOk {
-		// 	handleNestedCogo(ifStmt.Body)
-		// 	continue
-		// }
-
-		// Find functions calls in the style of 'cogo.ABC123()'
+		// Find functions calls in the style of 'xyz.ABC123()'
 		exprStmt, exprStmtOk := stmt.(*ast.ExprStmt)
 		if !exprStmtOk {
 			continue
@@ -193,7 +204,47 @@ func (p *processor) processDeclNode(c *astutil.Cursor) bool {
 	funcDecl.Body.List = append(funcDecl.Body.List,
 		switchStmt,
 	)
+
+	originalList := funcDecl.Body.List
+	funcDecl.Body.List = make([]ast.Stmt, 0, len(funcDecl.Body.List)+1)
+	funcDecl.Body.List = append(funcDecl.Body.List,
+		&ast.IfStmt{
+			Cond: createStmtFromSelFuncCall("cogo", "HasGen").(*ast.ExprStmt).X,
+			Body: &ast.BlockStmt{
+				List: []ast.Stmt{
+					&ast.ReturnStmt{
+						Results: []ast.Expr{&ast.CallExpr{
+							Fun: ast.NewIdent(funcDecl.Name.Name + "_cogo"),
+						}},
+					},
+				},
+			},
+		},
+	)
+	funcDecl.Body.List = append(funcDecl.Body.List, originalList...)
+
+	p.funcDeclsToWrite = append(p.funcDeclsToWrite, funcDecl)
+
 	return true
+}
+
+func createStmtFromFuncCall(funcName string) ast.Stmt {
+	return &ast.ExprStmt{
+		X: &ast.CallExpr{
+			Fun: ast.NewIdent(funcName),
+		},
+	}
+}
+
+func createStmtFromSelFuncCall(lhs, rhs string) ast.Stmt {
+	return &ast.ExprStmt{
+		X: &ast.CallExpr{
+			Fun: &ast.SelectorExpr{
+				X:   ast.NewIdent(lhs),
+				Sel: ast.NewIdent(rhs),
+			},
+		},
+	}
 }
 
 func funcDeclCallsCoroutineBegin(fd *ast.FuncDecl, coroutineParamName string) bool {

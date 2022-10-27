@@ -23,3 +23,7 @@ func (c *Coroutine[InT, OutT]) Tick() (out OutT, done bool) {
 
 func (c *Coroutine[InT, OutT]) Yield(out OutT) {
 }
+
+func HasGen() bool {
+	return true
+}

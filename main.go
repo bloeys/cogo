@@ -9,10 +9,6 @@ import (
 	"github.com/bloeys/cogo/cogo"
 )
 
-func Wow() {
-	println("wow")
-}
-
 func test(c *cogo.Coroutine[int, int]) (out int) {
 
 	c.Begin()
@@ -34,22 +30,6 @@ func test(c *cogo.Coroutine[int, int]) (out int) {
 	return out
 }
 
-// func test2() {
-
-// 	// cogo.Begin()
-
-// 	println("Hey")
-// 	cogo.Yield()
-
-// 	println("How you?")
-// 	cogo.Yield()
-
-// 	println("Bye")
-// 	cogo.Yield()
-
-// 	cogo.End()
-// }
-
 func main() {
 
 	c := &cogo.Coroutine[int, int]{
@@ -61,10 +41,6 @@ func main() {
 		println(out)
 	}
 
-	// test2()
-	// test2()
-	// test2()
-	// test2()
 }
 
 func FileLine() int {
