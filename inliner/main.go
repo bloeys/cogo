@@ -14,6 +14,13 @@ import (
 	"golang.org/x/tools/imports"
 )
 
+/* @TODO it seems that nested yields can be (generally?) implemented using the following rules:
+
+- Each top-level yield gets a case
+- Nested yields use the same case as the next top-level yield
+- We can goto within a case easily by having different sections in separate blocks, so the goto doesn't complain (e.g. about skipping variables)
+*/
+
 func printDebugInfo() {
 
 	fmt.Printf("Running inliner on '%s'\n", os.Getenv("GOFILE"))
