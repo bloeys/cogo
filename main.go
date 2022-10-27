@@ -9,13 +9,7 @@ import (
 	"github.com/bloeys/cogo/cogo"
 )
 
-func test_cogo(c *cogo.Coroutine[int, int]) (out int) { return 0 }
-
 func test(c *cogo.Coroutine[int, int]) (out int) {
-
-	if cogo.HasGen() {
-		return test_cogo(c)
-	}
 
 	c.Begin()
 
