@@ -16,19 +16,24 @@ func test(c *cogo.Coroutine[int, int]) (out int) {
 
 	c.Begin()
 
-	println("Tick 1")
+	println("\nTick 1")
 	c.Yield(1)
 
-	println("Tick 2")
+	if c.In > 1 {
+		println("\nTick 1.5")
+		c.Yield(c.In)
+	}
+
+	println("\nTick 2")
 	c.Yield(2)
 
-	println("Tick 3")
+	println("\nTick 3")
 	c.Yield(3)
 
-	println("Tick 4")
+	println("\nTick 4")
 	c.Yield(4)
 
-	println("Tick before end")
+	println("\nTick before end")
 
 	return out
 }
@@ -40,6 +45,7 @@ func main() {
 		In:   0,
 	}
 
+	c.In = 5
 	for out, done := c.Tick(); !done; out, done = c.Tick() {
 		println(out)
 	}

@@ -6,6 +6,7 @@ import (
 	"go/format"
 	"go/token"
 	"io"
+	"math/rand"
 	"os"
 	"strings"
 
@@ -166,13 +167,49 @@ func (p *processor) genCogoFuncsNodeProcessor(c *astutil.Cursor) bool {
 		},
 	}
 
+	subSwitchStmt := &ast.SwitchStmt{
+		Tag: ast.NewIdent(coroutineParamName + ".SubState"),
+		Body: &ast.BlockStmt{
+			List: []ast.Stmt{
+				getCaseWithStmts(nil, []ast.Stmt{}),
+			},
+		},
+	}
+
 	for i, stmt := range funcDecl.Body.List {
 
 		var cogoFuncSelExpr *ast.SelectorExpr
 
-		ifStmt, ok := stmt.(*ast.IfStmt)
-		if ok && ifStmtIsHasGen(ifStmt) {
-			funcDecl.Body.List[i] = &ast.EmptyStmt{}
+		ifStmt, ifStmtOk := stmt.(*ast.IfStmt)
+		if ifStmtOk {
+
+			if ifStmtIsHasGen(ifStmt) {
+				funcDecl.Body.List[i] = &ast.EmptyStmt{}
+				continue
+			}
+
+			subStateNums := p.genCogoIfStmt(ifStmt, coroutineParamName, len(switchStmt.Body.List))
+			for _, subStateNum := range subStateNums {
+
+				subSwitchStmt.Body.List = append(subSwitchStmt.Body.List,
+					getCaseWithStmts(
+						[]ast.Expr{ast.NewIdent(fmt.Sprint(subStateNum))},
+						[]ast.Stmt{
+							&ast.BranchStmt{
+								Tok:   token.GOTO,
+								Label: ast.NewIdent(getLblNameFromSubStateNum(subStateNum)),
+							},
+						},
+					),
+				)
+
+				var stmtToInsert ast.Stmt = &ast.LabeledStmt{
+					Label: ast.NewIdent(getLblNameFromSubStateNum(subStateNum)),
+					Stmt:  &ast.EmptyStmt{},
+				}
+				funcDecl.Body.List = insertIntoArr(funcDecl.Body.List, i+1, stmtToInsert)
+			}
+
 			continue
 		}
 
@@ -210,11 +247,27 @@ func (p *processor) genCogoFuncsNodeProcessor(c *astutil.Cursor) bool {
 			stmtsSinceLastCogo := funcDecl.Body.List[lastCaseEndBodyListIndex+1 : i]
 
 			caseStmts := make([]ast.Stmt, 0, len(stmtsSinceLastCogo)+2)
+
+			caseStmts = append(caseStmts, subSwitchStmt)
+			subSwitchStmt = &ast.SwitchStmt{
+				Tag: ast.NewIdent(coroutineParamName + ".SubState"),
+				Body: &ast.BlockStmt{
+					List: []ast.Stmt{
+						getCaseWithStmts(nil, []ast.Stmt{}),
+					},
+				},
+			}
+
 			caseStmts = append(caseStmts, stmtsSinceLastCogo...)
 			caseStmts = append(caseStmts,
 				&ast.IncDecStmt{
 					Tok: token.INC,
 					X:   ast.NewIdent(coroutineParamName + ".State"),
+				},
+				&ast.AssignStmt{
+					Lhs: []ast.Expr{ast.NewIdent(coroutineParamName + ".SubState")},
+					Tok: token.ASSIGN,
+					Rhs: []ast.Expr{ast.NewIdent("-1")},
 				},
 				&ast.ReturnStmt{
 					Results: callExpr.Args,
@@ -237,9 +290,25 @@ func (p *processor) genCogoFuncsNodeProcessor(c *astutil.Cursor) bool {
 	stmtsToEndOfFunc := funcDecl.Body.List[lastCaseEndBodyListIndex+1:]
 
 	caseStmts := make([]ast.Stmt, 0, len(stmtsToEndOfFunc)+1)
+
+	caseStmts = append(caseStmts, subSwitchStmt)
+	subSwitchStmt = &ast.SwitchStmt{
+		Tag: ast.NewIdent(coroutineParamName + ".SubState"),
+		Body: &ast.BlockStmt{
+			List: []ast.Stmt{
+				getCaseWithStmts(nil, []ast.Stmt{}),
+			},
+		},
+	}
+
 	caseStmts = append(caseStmts,
 		&ast.AssignStmt{
 			Lhs: []ast.Expr{ast.NewIdent(coroutineParamName + ".State")},
+			Tok: token.ASSIGN,
+			Rhs: []ast.Expr{ast.NewIdent("-1")},
+		},
+		&ast.AssignStmt{
+			Lhs: []ast.Expr{ast.NewIdent(coroutineParamName + ".SubState")},
 			Tok: token.ASSIGN,
 			Rhs: []ast.Expr{ast.NewIdent("-1")},
 		},
@@ -258,6 +327,11 @@ func (p *processor) genCogoFuncsNodeProcessor(c *astutil.Cursor) bool {
 			[]ast.Stmt{
 				&ast.AssignStmt{
 					Lhs: []ast.Expr{ast.NewIdent(coroutineParamName + ".State")},
+					Tok: token.ASSIGN,
+					Rhs: []ast.Expr{ast.NewIdent("-1")},
+				},
+				&ast.AssignStmt{
+					Lhs: []ast.Expr{ast.NewIdent(coroutineParamName + ".SubState")},
 					Tok: token.ASSIGN,
 					Rhs: []ast.Expr{ast.NewIdent("-1")},
 				},
@@ -280,6 +354,81 @@ func (p *processor) genCogoFuncsNodeProcessor(c *astutil.Cursor) bool {
 	p.funcDeclsToWrite = append(p.funcDeclsToWrite, funcDecl)
 
 	return true
+}
+
+func (p *processor) genCogoIfStmt(ifStmt *ast.IfStmt, coroutineParamName string, currCase int) (subStateNums []int32) {
+
+	for i, stmt := range ifStmt.Body.List {
+
+		selExpr, selExprArgs := tryGetSelExprFromStmt(stmt, coroutineParamName, "Yield")
+		if selExpr == nil {
+			continue
+		}
+
+		// @TODO: Ensure that subStateNums don't get reused
+		// subStateNum >= 1000_000
+		newSubStateNum := rand.Int31() + 1000_000
+		subStateNums = append(subStateNums, newSubStateNum)
+		ifStmt.Body.List[i] = &ast.BlockStmt{
+			List: []ast.Stmt{
+				&ast.AssignStmt{
+					Lhs: []ast.Expr{ast.NewIdent(coroutineParamName + ".State")},
+					Tok: token.ASSIGN,
+					Rhs: []ast.Expr{ast.NewIdent(fmt.Sprint(currCase))},
+				},
+				&ast.AssignStmt{
+					Lhs: []ast.Expr{ast.NewIdent(coroutineParamName + ".SubState")},
+					Tok: token.ASSIGN,
+					Rhs: []ast.Expr{ast.NewIdent(fmt.Sprint(newSubStateNum))},
+				},
+				&ast.ReturnStmt{
+					Results: selExprArgs,
+				},
+			},
+		}
+	}
+
+	return subStateNums
+}
+
+func getLblNameFromSubStateNum(subStateNum int32) string {
+	return fmt.Sprint("cogo_", subStateNum)
+}
+
+func insertIntoArr[T any](a []T, index int, value T) []T {
+
+	if len(a) == index {
+		return append(a, value)
+	}
+
+	a = append(a[:index+1], a[index:]...)
+	a[index] = value
+	return a
+}
+
+func tryGetSelExprFromStmt(stmt ast.Stmt, lhs, rhs string) (selExpr *ast.SelectorExpr, args []ast.Expr) {
+
+	exprStmt, ok := stmt.(*ast.ExprStmt)
+	if !ok {
+		return nil, nil
+	}
+
+	callExpr, ok := exprStmt.X.(*ast.CallExpr)
+	if !ok {
+		return nil, nil
+	}
+	args = callExpr.Args
+
+	selExpr, ok = callExpr.Fun.(*ast.SelectorExpr)
+	if !ok {
+		return nil, nil
+	}
+
+	if selExprIs(selExpr, lhs, rhs) {
+		return selExpr, args
+	}
+
+	return nil, nil
 }
 
 func (p *processor) genHasGenChecksOnOriginalFuncsNodeProcessor(c *astutil.Cursor) bool {
@@ -434,14 +583,14 @@ func funcCallHasLhsName(selExpr *ast.SelectorExpr, pkgName string) bool {
 	return ok && pkgIdent.Name == pkgName
 }
 
-func selExprIs(selExpr *ast.SelectorExpr, pkgName, typeName string) bool {
+func selExprIs(selExpr *ast.SelectorExpr, lhs, rhs string) bool {
 
 	pkgIdentExpr, ok := selExpr.X.(*ast.Ident)
 	if !ok {
 		return false
 	}
 
-	return pkgIdentExpr.Name == pkgName && selExpr.Sel.Name == typeName
+	return pkgIdentExpr.Name == lhs && selExpr.Sel.Name == rhs
 }
 
 // func filter[T any](arr []T, where func(x T) bool) []T {
@@ -485,6 +634,7 @@ func writeAst(fName, topComment string, fset *token.FileSet, node any) {
 
 	b, err := imports.Process(fName, nil, nil)
 	if err != nil {
+		format.Node(os.Stdout, fset, node)
 		panic("Failed to process imports on file " + fName + ". Err: " + err.Error())
 	}
 

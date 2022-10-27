@@ -6,33 +6,67 @@ import "github.com/bloeys/cogo/cogo"
 func test_cogo(c *cogo.Coroutine[int, int]) (out int) {
 	switch c.State {
 	case 0:
+		switch c.SubState {
+		default:
+		}
 
-		println("Tick 1")
+		println("\nTick 1")
 		c.State++
+		c.SubState = -1
 		return 1
 	case 1:
+		switch c.SubState {
+		default:
+		case 1299498081:
+			goto cogo_1299498081
+		}
 
-		println("Tick 2")
+		if c.In > 1 {
+			println("\nTick 1.5")
+			{
+				c.State = 1
+				c.SubState = 1299498081
+				return c.In
+			}
+		}
+	cogo_1299498081:
+		;
+
+		println("\nTick 2")
 		c.State++
+		c.SubState = -1
 		return 2
 	case 2:
+		switch c.SubState {
+		default:
+		}
 
-		println("Tick 3")
+		println("\nTick 3")
 		c.State++
+		c.SubState = -1
 		return 3
 	case 3:
+		switch c.SubState {
+		default:
+		}
 
-		println("Tick 4")
+		println("\nTick 4")
 		c.State++
+		c.SubState = -1
 		return 4
 	case 4:
+		switch c.SubState {
+		default:
+		}
 		c.State = -1
+		c.SubState = -1
 
-		println("Tick before end")
+		println("\nTick before end")
 
 		return out
 	default:
 		c.State = -1
+		c.SubState = -1
 		return
 	}
 }
