@@ -176,13 +176,14 @@ func (p *processor) genCogoFuncsNodeProcessor(c *astutil.Cursor) bool {
 		},
 	}
 
-	for i, stmt := range funcDecl.Body.List {
+	for i := 0; i < len(funcDecl.Body.List); i++ {
+
+		stmt := funcDecl.Body.List[i]
 
 		var cogoFuncSelExpr *ast.SelectorExpr
 		var blockStmt *ast.BlockStmt
 
-		ifStmt, ifStmtOk := stmt.(*ast.IfStmt)
-		if ifStmtOk {
+		if ifStmt, ifStmtOk := stmt.(*ast.IfStmt); ifStmtOk {
 
 			if ifStmtIsHasGen(ifStmt) {
 				funcDecl.Body.List[i] = &ast.EmptyStmt{}
@@ -190,6 +191,47 @@ func (p *processor) genCogoFuncsNodeProcessor(c *astutil.Cursor) bool {
 			}
 
 			blockStmt = ifStmt.Body
+
+		} else if forStmt, forStmtOk := stmt.(*ast.ForStmt); forStmtOk {
+
+			outInitBlock, postInitStmt, outIfStmt, subStateNums := p.genCogoForStmt(forStmt, coroutineParamName, len(switchStmt.Body.List))
+
+			if len(subStateNums) > 1 {
+				panic("For loops currently don't support more than one yield")
+			}
+
+			if len(subStateNums) == 1 {
+
+				// Insert post condition case
+				subSwitchStmt.Body.List = append(subSwitchStmt.Body.List,
+					getCaseWithStmts(
+						[]ast.Expr{ast.NewIdent(fmt.Sprint(subStateNums[0]))},
+						[]ast.Stmt{
+							postInitStmt,
+							&ast.BranchStmt{
+								Tok:   token.GOTO,
+								Label: ast.NewIdent(getLblNameFromSubStateNum(subStateNums[0])),
+							},
+						},
+					),
+				)
+
+				// Insert inital condition block
+				funcDecl.Body.List[i] = outInitBlock
+
+				// // Insert lable after initial condition
+				var stmtInterface ast.Stmt = &ast.LabeledStmt{
+					Label: ast.NewIdent(getLblNameFromSubStateNum(subStateNums[0])),
+					Stmt:  &ast.EmptyStmt{},
+				}
+				funcDecl.Body.List = insertIntoArr(funcDecl.Body.List, i+1, stmtInterface)
+
+				// // Replace for with if
+				stmtInterface = outIfStmt
+				funcDecl.Body.List = insertIntoArr(funcDecl.Body.List, i+2, stmtInterface)
+				i += 2
+				continue
+			}
 
 		} else if bStmt, blockStmtOk := stmt.(*ast.BlockStmt); blockStmtOk {
 			blockStmt = bStmt
@@ -217,6 +259,7 @@ func (p *processor) genCogoFuncsNodeProcessor(c *astutil.Cursor) bool {
 					Stmt:  &ast.EmptyStmt{},
 				}
 				funcDecl.Body.List = insertIntoArr(funcDecl.Body.List, i+1, stmtToInsert)
+				i += 1
 			}
 
 			continue
@@ -363,6 +406,67 @@ func (p *processor) genCogoFuncsNodeProcessor(c *astutil.Cursor) bool {
 	p.funcDeclsToWrite = append(p.funcDeclsToWrite, funcDecl)
 
 	return true
+}
+
+/*
+* Init is done in a block just before the for loop condition
+* Post is done in the case that jumps over the loop condition
+ */
+
+func (p *processor) genCogoForStmt(forStmt *ast.ForStmt, coroutineParamName string, currCase int) (outInitBlock *ast.BlockStmt, postInitStmt ast.Stmt, outIfStmt *ast.IfStmt, subStateNums []int32) {
+
+	outInitBlock = &ast.BlockStmt{
+		List: []ast.Stmt{
+			forStmt.Init,
+		},
+	}
+
+	postInitLblNum := rand.Int31() + 1000_000
+	subStateNums = append(subStateNums, postInitLblNum)
+
+	if forStmt.Post == nil {
+		postInitStmt = &ast.EmptyStmt{}
+	} else {
+		postInitStmt = forStmt.Post
+	}
+
+	outIfStmt = &ast.IfStmt{
+		Cond: forStmt.Cond,
+		Body: &ast.BlockStmt{
+			List: []ast.Stmt{},
+		},
+	}
+
+	forBodyList := forStmt.Body.List
+	for i, stmt := range forBodyList {
+
+		selExpr, selExprArgs := tryGetSelExprFromStmt(stmt, coroutineParamName, "Yield")
+		if selExpr == nil {
+			continue
+		}
+
+		forBodyList[i] = &ast.BlockStmt{
+			List: []ast.Stmt{
+				&ast.AssignStmt{
+					Lhs: []ast.Expr{ast.NewIdent(coroutineParamName + ".State")},
+					Tok: token.ASSIGN,
+					Rhs: []ast.Expr{ast.NewIdent(fmt.Sprint(currCase))},
+				},
+				&ast.AssignStmt{
+					Lhs: []ast.Expr{ast.NewIdent(coroutineParamName + ".SubState")},
+					Tok: token.ASSIGN,
+					Rhs: []ast.Expr{ast.NewIdent(fmt.Sprint(postInitLblNum))},
+				},
+				&ast.ReturnStmt{
+					Results: selExprArgs,
+				},
+			},
+		}
+	}
+
+	outIfStmt.Body.List = forBodyList
+
+	return outInitBlock, postInitStmt, outIfStmt, subStateNums
 }
 
 func (p *processor) genCogoBlockStmt(blockStmt *ast.BlockStmt, coroutineParamName string, currCase int) (subStateNums []int32) {

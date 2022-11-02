@@ -21,8 +21,11 @@ func test_cogo(c *cogo.Coroutine[int, int]) (out int) {
 			goto cogo_1299498081
 		case 2020727887:
 			goto cogo_2020727887
-		}
+		case 1428131847:
 
+			loop++
+			goto cogo_1428131847
+		}
 		{
 			println("\nInside block 1")
 			{
@@ -44,6 +47,20 @@ func test_cogo(c *cogo.Coroutine[int, int]) (out int) {
 		}
 	cogo_2020727887:
 		;
+		{
+
+			loop = 0
+		}
+	cogo_1428131847:
+		;
+		if loop < 10 {
+			println("\nFor loop tick number:", loop)
+			{
+				c.State = 1
+				c.SubState = 1428131847
+				return loop
+			}
+		}
 
 		println("\nTick 2")
 		c.State++

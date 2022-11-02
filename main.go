@@ -9,6 +9,8 @@ import (
 	"github.com/bloeys/cogo/cogo"
 )
 
+var loop = 0
+
 func test(c *cogo.Coroutine[int, int]) (out int) {
 	if cogo.HasGen() {
 		return test_cogo(c)
@@ -27,6 +29,11 @@ func test(c *cogo.Coroutine[int, int]) (out int) {
 	if c.In > 1 {
 		println("\nInside if 1")
 		c.Yield(c.In)
+	}
+
+	for loop = 0; loop < 10; loop++ {
+		println("\nFor loop tick number:", loop)
+		c.Yield(loop)
 	}
 
 	println("\nTick 2")
