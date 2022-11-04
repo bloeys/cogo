@@ -33,8 +33,10 @@ func test(c *cogo.Coroutine[int, int]) {
 	println("test yield:", 1)
 	c.Yield(1)
 
+	// Yield here until at least 100ms passed
 	c.YieldTo(cogo.NewSleeper(100 * time.Millisecond))
 
+	// Yield here until the coroutine 'test2' has finished
 	c.YieldTo(cogo.New(test2, 0))
 
 	println("test yield:", 2)
