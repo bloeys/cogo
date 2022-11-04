@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"go/ast"
 	"go/format"
@@ -15,7 +16,18 @@ import (
 	"golang.org/x/tools/imports"
 )
 
+var (
+	demo = flag.Bool("demo", false, "")
+)
+
 func main() {
+
+	flag.Parse()
+
+	if *demo {
+		runDemo()
+		return
+	}
 
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -276,7 +288,7 @@ func (p *processor) genCogoFuncsNodeProcessor(c *astutil.Cursor) bool {
 			// Add everything from the last begin/yield until this yield into a case
 			stmtsSinceLastCogo := funcDecl.Body.List[lastCaseEndBodyListIndex+1 : i]
 
-			caseStmts := make([]ast.Stmt, 0, len(stmtsSinceLastCogo)+2)
+			caseStmts := make([]ast.Stmt, 0, len(stmtsSinceLastCogo)+4)
 
 			caseStmts = append(caseStmts, subSwitchStmt)
 			subSwitchStmt = &ast.SwitchStmt{
@@ -299,9 +311,12 @@ func (p *processor) genCogoFuncsNodeProcessor(c *astutil.Cursor) bool {
 					Tok: token.ASSIGN,
 					Rhs: []ast.Expr{ast.NewIdent("-1")},
 				},
-				&ast.ReturnStmt{
-					Results: callExpr.Args,
+				&ast.AssignStmt{
+					Lhs: []ast.Expr{ast.NewIdent(coroutineParamName + ".Out")},
+					Tok: token.ASSIGN,
+					Rhs: callExpr.Args,
 				},
+				&ast.ReturnStmt{},
 			)
 
 			switchStmt.Body.List = append(switchStmt.Body.List,
@@ -313,6 +328,50 @@ func (p *processor) genCogoFuncsNodeProcessor(c *astutil.Cursor) bool {
 
 			lastCaseEndBodyListIndex = i
 
+		} else if cogoFuncSelExpr.Sel.Name == "YieldTo" {
+
+			// Add everything from the last begin/yield until this yield into a case
+			stmtsSinceLastCogo := funcDecl.Body.List[lastCaseEndBodyListIndex+1 : i]
+
+			caseStmts := make([]ast.Stmt, 0, len(stmtsSinceLastCogo)+5)
+
+			caseStmts = append(caseStmts, subSwitchStmt)
+			subSwitchStmt = &ast.SwitchStmt{
+				Tag: ast.NewIdent(coroutineParamName + ".SubState"),
+				Body: &ast.BlockStmt{
+					List: []ast.Stmt{
+						getCaseWithStmts(nil, []ast.Stmt{}),
+					},
+				},
+			}
+
+			caseStmts = append(caseStmts, stmtsSinceLastCogo...)
+			caseStmts = append(caseStmts,
+				&ast.IncDecStmt{
+					Tok: token.INC,
+					X:   ast.NewIdent(coroutineParamName + ".State"),
+				},
+				&ast.AssignStmt{
+					Lhs: []ast.Expr{ast.NewIdent(coroutineParamName + ".SubState")},
+					Tok: token.ASSIGN,
+					Rhs: []ast.Expr{ast.NewIdent("-1")},
+				},
+				&ast.AssignStmt{
+					Lhs: []ast.Expr{ast.NewIdent(coroutineParamName + ".Yielder")},
+					Tok: token.ASSIGN,
+					Rhs: callExpr.Args,
+				},
+				&ast.ReturnStmt{},
+			)
+
+			switchStmt.Body.List = append(switchStmt.Body.List,
+				getCaseWithStmts(
+					[]ast.Expr{ast.NewIdent(fmt.Sprint(len(switchStmt.Body.List)))},
+					caseStmts,
+				),
+			)
+
+			lastCaseEndBodyListIndex = i
 		}
 	}
 
@@ -435,9 +494,12 @@ func (p *processor) genCogoForStmt(forStmt *ast.ForStmt, coroutineParamName stri
 					Tok: token.ASSIGN,
 					Rhs: []ast.Expr{ast.NewIdent(fmt.Sprint(postInitLblNum))},
 				},
-				&ast.ReturnStmt{
-					Results: selExprArgs,
+				&ast.AssignStmt{
+					Lhs: []ast.Expr{ast.NewIdent(coroutineParamName + ".Out")},
+					Tok: token.ASSIGN,
+					Rhs: selExprArgs,
 				},
+				&ast.ReturnStmt{},
 			},
 		}
 	}
@@ -472,9 +534,12 @@ func (p *processor) genCogoBlockStmt(blockStmt *ast.BlockStmt, coroutineParamNam
 					Tok: token.ASSIGN,
 					Rhs: []ast.Expr{ast.NewIdent(fmt.Sprint(newSubStateNum))},
 				},
-				&ast.ReturnStmt{
-					Results: selExprArgs,
+				&ast.AssignStmt{
+					Lhs: []ast.Expr{ast.NewIdent(coroutineParamName + ".Out")},
+					Tok: token.ASSIGN,
+					Rhs: selExprArgs,
 				},
+				&ast.ReturnStmt{},
 			},
 		}
 	}
@@ -566,12 +631,12 @@ func createHasGenIfStmt(funcDecl *ast.FuncDecl, coroutineParamName string) *ast.
 		Cond: createStmtFromSelFuncCall("cogo", "HasGen").(*ast.ExprStmt).X,
 		Body: &ast.BlockStmt{
 			List: []ast.Stmt{
-				&ast.ReturnStmt{
-					Results: []ast.Expr{&ast.CallExpr{
+				&ast.ExprStmt{
+					X: &ast.CallExpr{
 						Fun:  ast.NewIdent(funcDecl.Name.Name + "_cogo"),
 						Args: []ast.Expr{ast.NewIdent(coroutineParamName)},
 					}},
-				},
+				&ast.ReturnStmt{},
 			},
 		},
 	}
