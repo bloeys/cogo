@@ -12,11 +12,14 @@ func runDemo() {
 	c := cogo.New(test, 0)
 
 	ticks := 1
+	start := time.Now()
 	for done := c.Tick(); !done; done = c.Tick() {
 		println("Ticks done:", ticks, "; Output:", c.Out, "\n")
 		ticks++
 		time.Sleep(1 * time.Millisecond)
 	}
+
+	println("Time taken:", time.Since(start).String())
 }
 
 func test(c *cogo.Coroutine[int, int]) {
