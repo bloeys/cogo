@@ -372,6 +372,45 @@ func (p *processor) genCogoFuncsNodeProcessor(c *astutil.Cursor) bool {
 			)
 
 			lastCaseEndBodyListIndex = i
+		} else if cogoFuncSelExpr.Sel.Name == "YieldNone" {
+
+			// Add everything from the last begin/yield until this yield into a case
+			stmtsSinceLastCogo := funcDecl.Body.List[lastCaseEndBodyListIndex+1 : i]
+
+			caseStmts := make([]ast.Stmt, 0, len(stmtsSinceLastCogo)+5)
+
+			caseStmts = append(caseStmts, subSwitchStmt)
+			subSwitchStmt = &ast.SwitchStmt{
+				Tag: ast.NewIdent(coroutineParamName + ".SubState"),
+				Body: &ast.BlockStmt{
+					List: []ast.Stmt{
+						getCaseWithStmts(nil, []ast.Stmt{}),
+					},
+				},
+			}
+
+			caseStmts = append(caseStmts, stmtsSinceLastCogo...)
+			caseStmts = append(caseStmts,
+				&ast.IncDecStmt{
+					Tok: token.INC,
+					X:   ast.NewIdent(coroutineParamName + ".State"),
+				},
+				&ast.AssignStmt{
+					Lhs: []ast.Expr{ast.NewIdent(coroutineParamName + ".SubState")},
+					Tok: token.ASSIGN,
+					Rhs: []ast.Expr{ast.NewIdent("-1")},
+				},
+				&ast.ReturnStmt{},
+			)
+
+			switchStmt.Body.List = append(switchStmt.Body.List,
+				getCaseWithStmts(
+					[]ast.Expr{ast.NewIdent(fmt.Sprint(len(switchStmt.Body.List)))},
+					caseStmts,
+				),
+			)
+
+			lastCaseEndBodyListIndex = i
 		}
 	}
 

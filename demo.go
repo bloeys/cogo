@@ -54,4 +54,8 @@ func test2(c *cogo.Coroutine[int, int]) {
 
 	println("test2222 yield:", 2)
 	c.Yield(2)
+
+	println("test2222 before yield none")
+	c.YieldNone()
+	println("test2222 after yield none")
 }

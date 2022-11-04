@@ -84,8 +84,19 @@ func test2_cogo(c *cogo.Coroutine[int, int]) {
 		switch c.SubState {
 		default:
 		}
+
+		println("test2222 before yield none")
+		c.State++
+		c.SubState = -1
+		return
+	case 3:
+		switch c.SubState {
+		default:
+		}
 		c.State = -1
 		c.SubState = -1
+
+		println("test2222 after yield none")
 	default:
 		c.State = -1
 		c.SubState = -1
