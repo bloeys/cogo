@@ -9,97 +9,46 @@ import (
 
 func test_cogo(c *cogo.Coroutine[int, int]) {
 	switch c.State {
-	case 0:
-		switch c.SubState {
-		default:
-		}
+	case 1:
+		goto cogo_1_1
+	case 2:
+		c.State = 1
+		goto cogo_2_0
+	case 3:
+		goto cogo_1_3
+	}
 
-		println("test yield:", 1)
-		c.State++
-		c.SubState = -1
+	println("test yield:", 1)
+	{
+		c.State = 1
 		c.Out = 1
 		return
-	case 1:
-		switch c.SubState {
-		default:
-		}
-		c.State++
-		c.SubState = -1
-		c.Yielder = cogo.NewSleeper(100 * time.Millisecond)
-		return
-	case 2:
-		switch c.SubState {
-		default:
-		}
-		c.State++
-		c.SubState = -1
-		c.Yielder = cogo.New(test2, 0)
-		return
-	case 3:
-		switch c.SubState {
-		default:
-		}
+	}
+cogo_1_1:
+	;
+cogo_2_0:
+	;
 
-		println("test yield:", 2)
-		c.State++
-		c.SubState = -1
+	if c.Out > 2 {
+		switch c.State {
+		case 1:
+			goto cogo_2_1
+		}
+		{
+			c.State = 2
+			c.Out = 1
+			return
+		}
+	cogo_2_1:
+	}
+
+	c.YieldTo(cogo.NewSleeper(100 * time.Millisecond))
+
+	println("test yield:", 2)
+	{
+		c.State = 3
 		c.Out = 2
 		return
-	case 4:
-		switch c.SubState {
-		default:
-		}
-		c.State = -1
-		c.SubState = -1
-	default:
-		c.State = -1
-		c.SubState = -1
-		return
 	}
-}
-
-func test2_cogo(c *cogo.Coroutine[int, int]) {
-	switch c.State {
-	case 0:
-		switch c.SubState {
-		default:
-		}
-
-		println("test2222 yield:", 1)
-		c.State++
-		c.SubState = -1
-		c.Out = 1
-		return
-	case 1:
-		switch c.SubState {
-		default:
-		}
-
-		println("test2222 yield:", 2)
-		c.State++
-		c.SubState = -1
-		c.Out = 2
-		return
-	case 2:
-		switch c.SubState {
-		default:
-		}
-
-		println("test2222 before yield none")
-		c.State++
-		c.SubState = -1
-		return
-	case 3:
-		switch c.SubState {
-		default:
-		}
-		c.State = -1
-		c.SubState = -1
-
-		println("test2222 after yield none")
-	default:
-		c.State = -1
-		c.SubState = -1
-		return
-	}
+cogo_1_3:
 }
